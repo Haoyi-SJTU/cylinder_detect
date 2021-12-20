@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -shared  -o PyRVC.cpython-36m-x86_64-linux-gnu.so CMakeFiles/PyRVC.dir/PyRVC.cpp.o  -Wl,-rpath,/opt/RVC/lib -flto /opt/RVC/lib/libRVC.so 

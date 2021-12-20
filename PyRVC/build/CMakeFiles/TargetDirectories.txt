@@ -1,0 +1,3 @@
+/home/shy/catkin_ws/src/RVC/PyRVC/build/CMakeFiles/edit_cache.dir
+/home/shy/catkin_ws/src/RVC/PyRVC/build/CMakeFiles/rebuild_cache.dir
+/home/shy/catkin_ws/src/RVC/PyRVC/build/CMakeFiles/PyRVC.dir

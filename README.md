@@ -9,6 +9,13 @@
 
 所用到的PCL库函数包括：
 
+点云滤波：
+    extrA.setInputCloud(cloud);                                       //设置输入点云
+    
+    extrA.setIndices(boost::make_shared<vector<int>>(pointIdxVec_A)); //设置索引
+    extrA.setNegative(true);                                          // 提取对应索引之外的点
+    extrA.filter(*non_overlapA);
+
 
 
 ## 函数、变量说明：

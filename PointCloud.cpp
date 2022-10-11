@@ -37,7 +37,7 @@
 #include <dirent.h> //DIR *dir
 // ROS 发布点云消息
 // #include <ros/ros.h>
-// #include <pcl/point_cloud.h>
+//  #include <pcl/point_cloud.h>
 // #include <pcl_conversions/pcl_conversions.h>
 // #include <pcl/common/transforms.h>
 // #include <sensor_msgs/PointCloud2.h>
@@ -48,6 +48,7 @@
 // 使用ROS请求服务
 #include <ros/ros.h>
 #include <couple/result.h>
+#include <std_srvs/Empty.h>
 
 #include <std_msgs/String.h>
 #include <std_msgs/Bool.h>
@@ -55,23 +56,46 @@
 
 using namespace std;
 
+//#define TEST_CLOUD //使用预先存储的测试点云
+#define REAL_CLOUD //使用实际拍摄的点云
+
 clock_t Start, End;
 typedef pcl::PointXYZ PointT;
 // std::fstream _file;
 
-float eye[4][4] =
-    // {{-0.0330089, 0.619485, -0.784314, 0.793654},
-    //  {0.0297455, 0.785003, 0.618777, 0.0247557},
-    //  {0.999012, -0.00290472, -0.044339, 0.596428},
+float left_eye[4][4] =
+    // 左相机,下摘钩
+    // {{0.161322, 0.589196, -0.791722, 0.382896},
+    //  {-0.181165, 0.806277, 0.563114, 0.197866},
+    //  {0.970131, 0.0525895, 0.236812, -0.0314958},
+    // {{0.105191, 0.582736, -0.805824, 0.42459},
+    //  {-0.126405, 0.811582, 0.5704, 0.172083},
+    //  {0.986386, 0.0418596, 0.159032, -0.0630963},
     //  {0, 0, 0, 1}};
-      // {{0.105301,   0.679102,  -0.726452,      0.6621},
-      //  {-0.0502465,   0.733214,   0.678139,    0.00778075},
-      //  {0.99317, -0.0349071,   0.111331,   -0.0115626},
-      //  {0, 0, 0, 1}};
- {{0.0989764 ,  0.686197,  -0.720651,    0.689631+0.05},
-{-0.0741222,   0.727279,   0.682328,   -0.00380715},
-  {0.992325, -0.0141181,   0.122846,   -0.0317281-0.02},//-0.0317281
-         {0,          0,          0,          1}};
+    {{0.111924, 0.596264, -0.794948, 0.42272-0.02},
+     {-0.0962574,0.802717,0.58854,0.147161-0.02},
+     {0.989044,0.010648 , 0.147238 ,  -0.0950513},
+     {0, 0, 0, 1}};
+
+
+float right_eye[4][4] =
+    // 右相机，上摘钩
+    // {{-0.0729268, 0.635561, -0.768599, 0.398185},
+    //  {0.0444401, 0.771956, 0.63412, 0.111436},
+    //  {0.996347, 0.0120877, -0.0845407, 0.712686},
+    //  {0, 0, 0, 1}};
+    // {{0.0652497, 0.625715, -0.777318, 0.389013},
+    //  {0.00765624, 0.779269, 0.626642, 0.116249},
+    //  {0.99784, 0.0349369, -0.0556377, 0.617474},
+    //  {0, 0, 0, 1}};
+    {{-0.0550255,0.622719, -0.780509, 0.40419},
+     {0.0894353, 0.781625, 0.617304,  0.135831,},
+     {0.994471, -0.0358376, -0.0987023,  0.619498},
+     {0, 0, 0, 1}};
+
+
+
+
 
 // 数组乘法计算
 // 输入：eye手眼标定矩阵，point待变换的坐标
@@ -102,17 +126,32 @@ int talker(ros::ServiceClient client, bool type, float distance, float x, float 
     float cosa = (ap * ap + ab * ab - bp * bp) / (2 * ab * ap);
     float sina = sqrt(1 - cosa * cosa);
     // cout<<"distance"<<ap*sina<<endl;
+
     float point[4][1] = {{x}, {y}, {z}, {1}};
     float result2[4][1] = {0};
-    multi(eye, point, result2);
+    // multi(eye, point, result2);
 
     float point0[4][1] = {{a}, {b}, {c}, {1}};
     float result02[4][1] = {0};
-    multi(eye, point0, result02);
+    // multi(eye, point0, result02);
 
     float point1[4][1] = {{d}, {e}, {f}, {0}};
     float result12[4][1] = {0};
-    multi(eye, point1, result12);
+    // multi(eye, point1, result12);
+
+    if (type) //上摘钩，右相机标定
+    {
+        // std::cout<<
+        multi(right_eye, point, result2);
+        multi(right_eye, point0, result02);
+        multi(right_eye, point1, result12);
+    }
+    else
+    {
+        multi(left_eye, point, result2);
+        multi(left_eye, point0, result02);
+        multi(left_eye, point1, result12);
+    }
 
     couple::result srv;
     srv.request.type = type;
@@ -126,12 +165,16 @@ int talker(ros::ServiceClient client, bool type, float distance, float x, float 
     srv.request.d = result12[0][0];
     srv.request.e = result12[1][0];
     srv.request.f = result12[2][0];
+    // if (type == 0) //xia摘钩
+    // {
+    //     srv.request.x = result2[0][0]-0.03;
+    // }
     cout << result2[0][0] << result2[1][0] << result2[2][0] << endl;
     cout << result02[0][0] << result02[1][0] << result02[2][0] << endl;
     cout << result12[0][0] << result12[1][0] << result12[2][0] << endl;
     while (!client.call(srv))
     {
-        cout << "妹有发送成功" << endl;
+        // cout << "妹有发送成功" << endl;
     }
     cout << "result of planning" << (bool)srv.response.status << endl;
     return (bool)srv.response.status;
@@ -161,12 +204,22 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cut_pointcloud(pcl::PointCloud<pcl::PointXYZ
     return (non_overlapA);
 }
 
+void write_txt(float a, float b, float c, float d)
+{
+    ofstream ofs;
+    ofs.open("/home/aemc/catkin_ws/devel/lib/rvv/out/plane.txt", ios::out);
+    ofs << a << " " << b << " " << c << " " << d << endl;
+}
+
+void write_status(int status)
+{
+    ofstream ofs;
+    ofs.open("/home/aemc/Desktop/jakausr/hpr_working/status/hookpick_status.txt", ios::out);
+    ofs << status << endl;
+}
+
 int main(int argc, char **argv)
 {
-
-    RVC::X1 x1 = open_fucking_rvc();
-
-    // string g_sSamplePath = "./train/";
 
     DIR *dir;
     if ((dir = opendir("/home/aemc/catkin_ws/devel/lib/rvv/out/")) == NULL)
@@ -186,6 +239,7 @@ int main(int argc, char **argv)
     {
         fscanf(DATA, "%lf", &type);
     }
+    RVC::X1 x1 = open_rvc(type);
 
     time_t nowtime;
     struct tm *p; //时间结构体指针 p
@@ -195,34 +249,53 @@ int main(int argc, char **argv)
     RVC::X1::CaptureOptions temp;
     if (hour >= 9 && hour < 16)
     {
-        temp.exposure_time_3d = 18;
+        temp.exposure_time_3d = 70;
         if (hour >= 11 && hour <= 14)
-            temp.exposure_time_3d = 12;
+            temp.exposure_time_3d = 50;
     }
     else
     {
-        temp.exposure_time_3d = 35;
+        temp.exposure_time_3d = 70;
     }
-    // temp.exposure_time_2d = 3;
+
+    unsigned int times_of_capture = 0; //记录拍照次数
+    unsigned int sent_srv_times = 0;   //记录发送srv的次数
 
     ros::init(argc, argv, "talker");
     ros::NodeHandle node;
     ros::ServiceClient client = node.serviceClient<couple::result>("talker");
+    ros::ServiceClient collision_client = node.serviceClient<std_srvs::Empty>("collision_pc");
 
 L1:
     Start = clock();
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>);
+#ifdef REAL_CLOUD
     if (x1.Capture(temp) == true)
     {
         std::cout << "在拍了在拍了!" << std::endl;
         RVC::PointMap pm = x1.GetPointMap();
         cloud = PointMap2CloudPoint(pm);
         End = clock();
+        times_of_capture++;
     }
     else
     {
         std::cout << "拍照失败!" << std::endl;
     }
+    // {
+    //     pcl::PCDWriter writer;
+    //     writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/original.pcd", *cloud, false);
+    // }
+#endif
+
+#ifdef TEST_CLOUD
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/original.pcd", *cloud) == -1)
+    {
+        PCL_ERROR("测试点云读取失败! \n");
+        return 0;
+    }
+    times_of_capture++;
+#endif
 
     End = clock();
     double endtime = (double)(End - Start) / CLOCKS_PER_SEC;
@@ -243,19 +316,15 @@ L1:
     pcl::PassThrough<pcl::PointXYZ> pass0;
     pass0.setFilterFieldName("y");
     pass0.setInputCloud(cloud);
-    pass0.setFilterLimits(-0.8, 0.6);
+    // pass0.setFilterLimits(-0.8, 0.6);
+    pass0.setFilterLimits(0.0, 0.6);
     pass0.filter(*cloud); //直接在输入点云cloud上裁剪
 
     // 降采样
     pcl::VoxelGrid<pcl::PointXYZ> sor;
     sor.setInputCloud(cloud);
     sor.setLeafSize(0.005, 0.005, 0.005); //单位是什么？(0.003f, 0.003f, 0.003f)
-    sor.filter(*cloud);                   //
-
-    {
-        pcl::PCDWriter writer;
-        writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/original.pcd", *cloud, false);
-    }
+    sor.filter(*cloud);
 
     // 提取平面并删除
     pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
@@ -277,12 +346,32 @@ L1:
     cout << "平面方程: " << coefficients->values[0] << "x+" << coefficients->values[1] << "y+"
          << coefficients->values[2] << "z+" << coefficients->values[3] << "=0" << std::endl;
     // 计算当前识别的平面相对标准平面的偏差  -0.0929844x+0.721556y+0.686084z+-3.38792=0   -0.106776x+-0.701113y+0.70501z+-1.1997=0
-    float aa = (-abs(coefficients->values[0]) -0.106776) / 2;
-    float bb = (abs(coefficients->values[1]) + 0.701113) / 2;
-    float cc = (abs(coefficients->values[2]) + 0.70501) / 2;
-    float dd = coefficients->values[3] + 1.1997;
-    float distance = -dd / (sqrt(aa * aa + bb * bb + cc * cc)); //distance=-dd/(sqrt(aa*aa+bb*bb+cc*cc));
-    if (abs(distance) < 0.9)                                    // 仅当当前平面平行于标准平面，且两者距离不超过0.9m时
+    // 0804
+    //C62  0.0926617x+-0.638725y+0.763835z+-0.801799=0
+    //C64   0.0669099x+-0.623524y+0.778936z+-0.982558=0
+    // 0805
+    //C64  0.0633886x+-0.629727y+0.774226z+-0.996604=0
+    //C70  -0.106091x+-0.634817y+0.765344z+-1.00926=0
+    // C70 -0.0852571x+-0.623354y+0.777278z+-1.0208=0
+    // C64 0.0599295x+-0.626501y+0.777113z+-1.02729=0
+    // C70 -0.0945694x+-0.628601y+0.771957z+-1.08352=0
+    // C70 -0.0970662x+-0.630687y+0.769943z+-1.39093=0
+    //C70  -0.0645844x+-0.642501y+0.763558z+-1.08227=0
+    // 0812
+    // C70 0.10673x+-0.63675y+0.763648z+-1.0186=0
+    // C70 -0.0867282x+-0.632159y+0.769969z+-1.08076=0
+    // C70  -0.084056x+-0.634719y+0.768158z+-1.07771=0
+    // C70  -0.0679077x+-0.630514y+0.773202z+-1.08856=0
+    // C64 0.0912559x+-0.625265y+0.775058z+-1.10064=0
+
+    write_txt(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3]);
+
+    float aa = ((coefficients->values[0]) + 0.0912559) / 2;
+    float bb = ((coefficients->values[1]) - 0.625265) / 2;
+    float cc = ((coefficients->values[2]) + 0.775058) / 2;
+    float dd = coefficients->values[3] + 1.10064;
+    float distance = dd / (sqrt(aa * aa + bb * bb + cc * cc)); //distance=-dd/(sqrt(aa*aa+bb*bb+cc*cc));
+    if (abs(distance) < 0.9)                                   // 仅当当前平面平行于标准平面，且两者距离不超过0.9m时
     {
         cout << "车车平移距离：" << distance << endl;
     }
@@ -299,12 +388,16 @@ L1:
     extract00.setNegative(true);           // true，提取平面外点
     extract00.filter(*cloud2);             // 执行滤波，并将结果点云保存到cloud中
 
+    pcl::PointCloud<PointT>::Ptr plane(new pcl::PointCloud<PointT>);
+    extract00.setNegative(false); // flase,提取平面内的点
+    extract00.filter(*plane);     // 执行滤波，并将结果点云保存到cloud中
     // 分割指定阈值内的平面
     double A = coefficients->values[0];
     double B = coefficients->values[1];
     double C = coefficients->values[2];
     double D = coefficients->values[3];
     vector<int> pointIdxVec;
+    // 移除所有紧邻这个平面的点
     for (int i = 0; i < cloud2->points.size(); ++i)
     {
         float x0 = cloud2->points[i].x;
@@ -318,28 +411,62 @@ L1:
     }
     pcl::copyPointCloud(*cloud2, pointIdxVec, *cloud2);
 
-    // {pcl::PCDWriter writer;
-    //  writer.write<pcl::PointXYZ> ("/home/aemc/catkin_ws/devel/lib/rvv/out/remove_plane.pcd", *cloud2, false);}
-
-    { // 第二次平面移除
-        pcl::ModelCoefficients::Ptr coefficients2(new pcl::ModelCoefficients);
-        pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-        seg0.setOptimizeCoefficients(true);
-        seg0.setModelType(pcl::SACMODEL_PLANE);
-        seg0.setMethodType(pcl::SAC_RANSAC);
-        seg0.setDistanceThreshold(0.01);
-        seg0.setInputCloud(cloud2);
-        seg0.segment(*inliers, *coefficients2);
-        if (inliers->indices.size() != 0)
-        {
-            cout << "second plane:" << inliers->indices.size() << endl;
-            pcl::ExtractIndices<PointT> extract00; // 创建索引提取点对象
-            extract00.setInputCloud(cloud2);       // 设置输入点云：待分割点云
-            extract00.setIndices(inliers);         // 设置内点索引
-            extract00.setNegative(true);           // true，提取平面外点
-            extract00.filter(*cloud2);             // 执行滤波，并将结果点云保存到cloud中
-        }
+    {
+        pcl::PCDWriter writer;
+        writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/plane.pcd", *plane, false);
     }
+
+    pcl::PointXYZ plane_min; //用于存放三个轴的最小值
+    pcl::PointXYZ plane_max; //用于存放三个轴的最大值
+    pcl::getMinMax3D(*plane, plane_min, plane_max);
+    pcl::PassThrough<pcl::PointXYZ> plane_y_filter;
+    plane_y_filter.setFilterFieldName("y");
+    plane_y_filter.setInputCloud(cloud2);
+    plane_y_filter.setFilterLimits(plane_min.y - 0.05, 5);
+    plane_y_filter.filter(*cloud2); //直接在输入点云cloud上裁剪
+    plane_y_filter.setFilterFieldName("z");
+    plane_y_filter.setInputCloud(cloud2);
+    plane_y_filter.setFilterLimits(plane_min.z - 0.2, 5);
+    plane_y_filter.filter(*cloud2); //直接在输入点云cloud上裁剪
+
+    // { // 第二次平面移除
+    //     pcl::ModelCoefficients::Ptr coefficients2(new pcl::ModelCoefficients);
+    //     pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+    //     seg0.setOptimizeCoefficients(true);
+    //     seg0.setModelType(pcl::SACMODEL_PLANE);
+    //     seg0.setMethodType(pcl::SAC_RANSAC);
+    //     seg0.setDistanceThreshold(0.01);
+    //     seg0.setInputCloud(cloud2);
+    //     seg0.segment(*inliers, *coefficients2);
+    //     if (inliers->indices.size() != 0)
+    //     {
+    //         cout << "second plane:" << inliers->indices.size() << endl;
+    //         pcl::ExtractIndices<PointT> extract00; // 创建索引提取点对象
+    //         extract00.setInputCloud(cloud2);       // 设置输入点云：待分割点云
+    //         extract00.setIndices(inliers);         // 设置内点索引
+    //         extract00.setNegative(true);           // true，提取平面外点
+    //         extract00.filter(*cloud2);             // 执行滤波，并将结果点云保存到cloud中
+    //     }
+    // }
+
+    if (type) // 若type为1，则为上摘钩，删除x坐标<0的点
+    {
+        pcl::PassThrough<pcl::PointXYZ> pass;
+        pass.setFilterFieldName("x");
+        pass.setInputCloud(cloud2);
+       // pass.setFilterLimits(-0.6, 0.1);
+        pass.setFilterLimits(-0.6, 0.4);
+        pass.filter(*cloud2); //直接在输入点云cloud上裁剪
+    }
+    else // 若type为0，则为下摘钩，删除x坐标<0的点
+    {
+        pcl::PassThrough<pcl::PointXYZ> pass;
+        pass.setFilterFieldName("x");
+        pass.setInputCloud(cloud2);
+        pass.setFilterLimits(-0.9, 0.2);
+        pass.filter(*cloud2); //直接在输入点云cloud上裁剪
+    }    
+
 
     // 做圆柱拟合前先清理干净噪点
     {
@@ -383,6 +510,11 @@ L1:
         *cloud2 = *cloud2_copy;
     }
 
+    // {
+    //     pcl::PCDWriter writer;
+    //     writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/clear_points.pcd", *cloud2, false);
+    // }
+
     pcl::PassThrough<pcl::PointXYZ> pass;
     pass.setFilterFieldName("x");
     pass.setInputCloud(cloud2);
@@ -418,8 +550,10 @@ L1:
     // 设置counter是为了避免陷入死循环，循环三次后即使没有正确结果也强制退出
     while (flag < 0.1 && counter <= 1)
     {
-        // {pcl::PCDWriter writer;
-        //  writer.write<pcl::PointXYZ> ("/home/aemc/catkin_ws/devel/lib/rvv/out/filter0.pcd", *cloud2, false);}
+        // {
+        //     pcl::PCDWriter writer;
+        //     writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/filter0.pcd", *cloud2, false);
+        // }
         pcl::PassThrough<pcl::PointXYZ> pass;
         pass.setFilterLimits(Xmin, Xmax);
         pass.filter(*cloud2);     //直接在输入点云cloud上裁剪
@@ -533,9 +667,23 @@ L1:
         pcl::PointXYZ min; //用于存放三个轴的最小值
         pcl::PointXYZ max; //用于存放三个轴的最大值
         pcl::getMinMax3D(*cut_cylinder, min, max);
+        float x_min = min.x;
         float y_min = (min.x - a) * e / d + b;
         float z_min = (min.x - a) * f / d + c;
-        cout << "呐呐呐把手下端点(" << min.x << "," << y_min << "," << z_min << ")" << endl;
+        float y_max = (max.x - a) * e / d + b;
+        float z_max = (max.x - a) * f / d + c;
+        cout <<"变换前的下坐标 "<< x_min <<" "<<y_min<<" "<<z_min<< endl;
+        
+        // if (type == 0) //xia摘钩
+        // {
+        //     // x_min = 
+        //     y_min = (min.x - a) * e / d + b;
+        //     z_min = (min.x - a) * f / d + c;
+        //     y_max = (max.x - a) * e / d + b;
+        //     float z_max = (max.x - a) * f / d + c;
+        // }
+
+        cout << "呐呐呐把手下端点(" << x_min << "," << y_min << "," << z_min << ")" << endl;
 
         pcl::PointCloud<pcl::PointXYZ>::Ptr non_overlapA(new pcl::PointCloud<pcl::PointXYZ>);
         non_overlapA = cut_pointcloud(cloud, cut_cylinder);
@@ -563,16 +711,23 @@ L1:
         {
             pcl::PCDWriter writer;
             writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/collision.pcd", *non_overlapA, false);
+            std_srvs::Empty emp;
+            collision_client.call(emp);
         }
 
-        // 去掉已经识别出来的圆柱
-        pcl::ExtractIndices<PointT> extract2;  //创建索引提取点对象
-        extract2.setInputCloud(cloud2);        //输入：待分割点云
-                                               // 注意！这里用的是原始降采样的点云，没有做平面移除
-        extract2.setIndices(inliers_cylinder); //设置内点索引
-        extract2.setNegative(true);            //true，提取圆柱体外点
+        // //去掉已经识别出来的圆柱
+        // pcl::ExtractIndices<PointT> extract2;  //创建索引提取点对象
+        // extract2.setInputCloud(cloud2);        //输入：待分割点云
+        //                                        // 注意！这里用的是原始降采样的点云，没有做平面移除
+        // extract2.setIndices(inliers_cylinder); //设置内点索引
+        // extract2.setNegative(true);            //true，提取圆柱体外点
+        // pcl::PointCloud<PointT>::Ptr plus(new pcl::PointCloud<PointT>());
+        // extract2.filter(*plus);
+
+        // //去掉已经识别出来的圆柱
         pcl::PointCloud<PointT>::Ptr plus(new pcl::PointCloud<PointT>());
-        extract2.filter(*plus);
+        plus = cut_pointcloud(cloud2, cut_cylinder);
+
         // 对抠掉把手的剩余点云做离群值移除
         pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor3;
         sor3.setInputCloud(plus);
@@ -614,8 +769,8 @@ L1:
             float bb = 0;
             float cc = 0;
             // Xdelta = 0.05;
-            Xmin = min.x + 0.15;
-            Xmax = max.x + 0.05;
+            Xmin = min.x + 0.2;
+            Xmax = max.x + 0.1;
             pcl::PointCloud<PointT>::Ptr cloud_cylinder2(new pcl::PointCloud<PointT>());
             //找转轴的条件：近似与y轴平行；且两根圆柱中心之距离小于一定范围
             // 设置counter是为了避免陷入死循环，循环三次后即使没有正确结果也强制退出
@@ -651,10 +806,6 @@ L1:
                 // // 此处导出的点云应当为干净的转轴圆柱
             }
             cout << "OJBK2" << endl;
-            {
-                pcl::PCDWriter writer;
-                writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/cylinder2.pcd", *cloud_cylinder2, false);
-            }
 
             // pcl::ExtractIndices<PointT> extract3;   // 创建索引提取点对象
             // extract3.setInputCloud(plus);           // 设置输入点云：待分割点云
@@ -665,41 +816,104 @@ L1:
 
             if (!cloud_cylinder2->points.empty())
             {
-                // pcl::PCDWriter writer;
-                // writer.write("out/cylinder2.pcd", *cloud_cylinder2, true);
+                {
+                    pcl::PCDWriter writer;
+                    writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/cylinder2.pcd", *cloud_cylinder2, false);
+                }
+
                 cout << "转轴轴线点坐标(" << coefficients_cylinder2->values[0] << "," << coefficients_cylinder2->values[1] << "," << coefficients_cylinder2->values[2] << ")" << endl;
                 cout << "转轴方向向量(" << coefficients_cylinder2->values[3] << "," << coefficients_cylinder2->values[4] << "," << coefficients_cylinder2->values[5] << ")" << endl;
                 cout << "转轴半径" << coefficients_cylinder2->values[6] << endl;
 
-                End = clock();
-                double endtime = (double)(End - Start) / CLOCKS_PER_SEC;
-                cout << "Total time:" << endtime << endl;
-                if (!talker(client, bool(type), float(distance), min.x, y_min, z_min, coefficients_cylinder2->values[0], coefficients_cylinder2->values[1], coefficients_cylinder2->values[2], coefficients_cylinder2->values[3], coefficients_cylinder2->values[4], coefficients_cylinder2->values[5]))
+                // End = clock();
+                // double endtime = (double)(End - Start) / CLOCKS_PER_SEC;
+                // cout << "Total time:" << endtime << endl;
+                int planning_status = talker(client, bool(type), float(distance), x_min, y_min, z_min, coefficients_cylinder2->values[0], coefficients_cylinder2->values[1], coefficients_cylinder2->values[2], coefficients_cylinder2->values[3], coefficients_cylinder2->values[4], coefficients_cylinder2->values[5]);
+                if (sent_srv_times <= 2 && !planning_status)
                 {
+                    sent_srv_times++;
                     goto L1;
                 }
-
-                close_fucking_rvc(x1);
+                if (planning_status)
+                {
+                    write_status(1);
+                }
+                else
+                {
+                    write_status(3);
+                }
+                close_rvc(x1);
+                return 1;
             }
             else
             {
-                PCL_ERROR("糟糕！未提取出转轴圆柱轴线！");
+                PCL_ERROR("识别错误！未提取出转轴圆柱轴线！");
                 End = clock();
                 double endtime = (double)(End - Start) / CLOCKS_PER_SEC;
                 cout << "Total time:" << endtime << endl;
+                if (times_of_capture > 3)
+                {
+                    int planning_status;
+                    close_rvc(x1);
+                    if (type)
+                    {
+                        planning_status = talker(client, bool(type), float(distance), x_min, y_min, z_min, max.x, y_max, z_max, 0.007522, 0.784111, 0.6205748);
+                    }
+                    else
+                    {
+                        planning_status = talker(client, bool(type), float(distance), x_min, y_min, z_min, max.x, y_max, z_max, -0.12, 0.79408, 0.5958); //-0.12, 0.049, 1.228
+                    }
+                    if (planning_status)
+                    {
+                        write_status(1);
+                    }
+                    else
+                    {
+                        write_status(3);
+                    }
+                    return 0;
+                }
                 goto L1;
             }
-            cout << "over OJBK" << endl;
         }
         else
         {
-            PCL_ERROR("糟糕！抠掉把手后的点云聚类为空");
+            PCL_ERROR("识别错误！抠掉把手后的点云聚类为空");
+            if (times_of_capture > 3)
+            {
+                int planning_status;
+                close_rvc(x1);
+                if (type)
+                {
+                    planning_status = talker(client, bool(type), float(distance), min.x, y_min, z_min, max.x, y_max, z_max, 0.007522, 0.784111, 0.6205748);
+                }
+                else
+                {
+                    planning_status = talker(client, bool(type), float(distance), min.x, y_min, z_min, max.x, y_max, z_max, -0.12, 0.79408, 0.5958);
+                }
+                if (planning_status)
+                {
+                    write_status(1);
+                }
+                else
+                {
+                    write_status(3);
+                }
+                return 0;
+            }
             goto L1;
         }
     }
     else
     {
-        PCL_ERROR("糟糕！未提取出把手圆柱体！");
+        PCL_ERROR("识别错误！未提取出把手圆柱体！");
+        if (times_of_capture > 3)
+        {
+            close_rvc(x1);
+            talker(client, bool(type), float(distance), 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            write_status(3);
+            return 0;
+        }
         goto L1;
     }
 

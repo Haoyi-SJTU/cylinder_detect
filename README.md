@@ -96,6 +96,19 @@
 - 千兆网线
 - 计算机（CPU: Intel 7代i7，内存：16G，硬盘：256G固态）
 
+## 配置环境
+ - ubuntu 16.04
+ - ROS kinetic
+ 
+ 实测在高版本的ubuntu（作者在ubuntu 20.04上测试的）也可以运行，但由于c++版本原因，可能会报错：
+ 这时需要在cmakelist.txt里增加如下几行：
+ 
+```
+    ADD_COMPILE_OPTIONS(-std=c++11 )
+    ADD_COMPILE_OPTIONS(-std=c++14 )
+    set( CMAKE_CXX_FLAGS "-std=c++11 -O3" ) 
+
+```
 
 ## 硬件操作步骤：
 

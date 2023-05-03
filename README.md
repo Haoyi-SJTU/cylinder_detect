@@ -118,7 +118,8 @@
 ## 参考点云文件：
 
 [0323点云-交大云盘](https://jbox.sjtu.edu.cn/l/81a6sr)
-对该点云数据对应调整的参数，修改了源码，我放在了`TianJin0323`分支下。
+
+对该点云数据对应调整的参数，修改了源码，我放在了[`TianJin0323`](https://github.com/Haoyi-SJTU/cylinder_detect/tree/Haoyi-SJTU-TianJin0321)分支下。
 
 
 ## 硬件操作步骤：

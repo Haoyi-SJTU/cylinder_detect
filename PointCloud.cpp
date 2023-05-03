@@ -47,12 +47,18 @@
 
 using namespace std;
 
+#define DEBUG_MODE // 在运行中保存关键中间步骤的点云以备人工检查，注释掉以提高速度
 // #define TEST_CLOUD //使用预先存储的测试点云
 #define REAL_CLOUD // 使用实际拍摄的点云
 
 clock_t Start, End;
 typedef pcl::PointXYZ PointT;
 
+const char train_num_place[] = "/home/aemc/catkin_ws/devel/lib/rvv/out/"; // 车号识别结果的地址
+const char original_place[] = "/home/aemc/catkin_ws/devel/lib/rvv/out/original.pcd"; // 原始点云的地址
+const char cylinder_place[] ="/home/aemc/catkin_ws/devel/lib/rvv/out/cylinder.pcd";// 把手点云的地址
+const char cylinder2_place[] ="/home/aemc/catkin_ws/devel/lib/rvv/out/cylinder2.pcd";// 转轴点云的地址
+const char collision_place[] ="/home/aemc/catkin_ws/devel/lib/rvv/out/collision.pcd";// 避障点云的地址
 // 左相机,下摘钩
 float left_eye[4][4] =
     {{0.111924, 0.596264, -0.794948, 0.42272 - 0.02},
@@ -198,7 +204,7 @@ int main(int argc, char **argv)
 {
     // 读取车号识别结果：上摘钩还是下摘钩
     DIR *dir;
-    if ((dir = opendir("/home/aemc/catkin_ws/devel/lib/rvv/out/")) == NULL)
+    if ((dir = opendir(train_num_place)) == NULL)
         system("mkdir -p /home/aemc/catkin_ws/devel/lib/rvv/out/");
     FILE *DATA;
     double type = 0;
@@ -249,14 +255,14 @@ L1:
     {
         std::cout << "拍照失败!" << std::endl;
     }
-    // {
-    //     pcl::PCDWriter writer;
-    //     writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/original.pcd", *cloud, false);
-    // }
+    {
+        pcl::PCDWriter writer;
+        writer.write<pcl::PointXYZ>(original_place, *cloud, false);
+    }
 #endif
 
 #ifdef TEST_CLOUD
-    if (pcl::io::loadPCDFile<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/original.pcd", *cloud) == -1)
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>(original_place, *cloud) == -1)
     {
         PCL_ERROR("测试点云读取失败! \n");
         return 0;
@@ -277,8 +283,14 @@ L1:
     pcl::PassThrough<pcl::PointXYZ> pass0;
     pass0.setFilterFieldName("y");
     pass0.setInputCloud(cloud);
-    pass0.setFilterLimits(0.0, 0.6);
+    pass0.setFilterLimits(-0.5, 0.6);
     pass0.filter(*cloud); // 在输入点云cloud上裁剪
+
+    pcl::PassThrough<pcl::PointXYZ> pass1;
+    pass1.setFilterFieldName("z");
+    pass1.setInputCloud(cloud);
+    pass1.setFilterLimits(0.3, 2);
+    pass1.filter(*cloud); // 直接在输入点云cloud上裁剪
 
     // 降采样
     pcl::VoxelGrid<pcl::PointXYZ> sor;
@@ -363,24 +375,25 @@ L1:
     plane_y_filter.setFilterLimits(plane_min.z - 0.2, 5);
     plane_y_filter.filter(*cloud2); // 直接在输入点云cloud上裁剪
 
-    // { // 第二次平面移除
-    //     pcl::ModelCoefficients::Ptr coefficients2(new pcl::ModelCoefficients);
-    //     pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-    //     seg0.setOptimizeCoefficients(true);
-    //     seg0.setModelType(pcl::SACMODEL_PLANE);
-    //     seg0.setMethodType(pcl::SAC_RANSAC);
-    //     seg0.setDistanceThreshold(0.01);
-    //     seg0.setInputCloud(cloud2);
-    //     seg0.segment(*inliers, *coefficients2);
-    //     if (inliers->indices.size() != 0)
-    //     {
-    //         pcl::ExtractIndices<PointT> extract00; // 创建索引提取点对象
-    //         extract00.setInputCloud(cloud2);       // 设置输入点云：待分割点云
-    //         extract00.setIndices(inliers);         // 设置内点索引
-    //         extract00.setNegative(true);           // true，提取平面外点
-    //         extract00.filter(*cloud2);             // 执行滤波，并将结果点云保存到cloud中
-    //     }
-    // }
+    if (type)
+    { // 第二次平面移除
+        pcl::ModelCoefficients::Ptr coefficients2(new pcl::ModelCoefficients);
+        pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+        seg0.setOptimizeCoefficients(true);
+        seg0.setModelType(pcl::SACMODEL_PLANE);
+        seg0.setMethodType(pcl::SAC_RANSAC);
+        seg0.setDistanceThreshold(0.01);
+        seg0.setInputCloud(cloud2);
+        seg0.segment(*inliers, *coefficients2);
+        if (inliers->indices.size() != 0)
+        {
+            pcl::ExtractIndices<PointT> extract00; // 创建索引提取点对象
+            extract00.setInputCloud(cloud2);       // 设置输入点云：待分割点云
+            extract00.setIndices(inliers);         // 设置内点索引
+            extract00.setNegative(true);           // true，提取平面外点
+            extract00.filter(*cloud2);             // 执行滤波，并将结果点云保存到cloud中
+        }
+    }
 
     if (type) // 若为上摘钩(type=1)，则只保留x坐标(-0.6, 0.4)范围内的点
     {
@@ -572,14 +585,14 @@ L1:
                 max_point = cloud_cluster->size();
             }
         }
-
         *cut_cylinder = *copy1;
-        cout << "圆柱之点数" << cut_cylinder->size() << endl;
-        // 存储识别到的把手
-        {
+
+#ifdef DEBUG_MODE
+        { // 存储识别到的把手
             pcl::PCDWriter writer;
-            writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/cylinder.pcd", *cut_cylinder, false);
+            writer.write<pcl::PointXYZ>(cylinder_place, *cut_cylinder, false);
         }
+#endif
 
         // 计算圆柱轴线两个端点的坐标
         pcl::PointXYZ min; // 用于存放三个轴的最小值
@@ -591,44 +604,14 @@ L1:
         float y_max = (max.x - a) * e / d + b;
         float z_max = (max.x - a) * f / d + c;
         cout << "变换前的下坐标 " << x_min << " " << y_min << " " << z_min << endl;
-
-        // if (type == 0) //xia摘钩
-        // {
-        //     // x_min =
-        //     y_min = (min.x - a) * e / d + b;
-        //     z_min = (min.x - a) * f / d + c;
-        //     y_max = (max.x - a) * e / d + b;
-        //     float z_max = (max.x - a) * f / d + c;
-        // }
-
         cout << "把手下端点(" << x_min << "," << y_min << "," << z_min << ")" << endl;
 
         pcl::PointCloud<pcl::PointXYZ>::Ptr non_overlapA(new pcl::PointCloud<pcl::PointXYZ>);
         non_overlapA = cut_pointcloud(cloud, cut_cylinder);
-        // {// 存储用于点云避障的点云文件，该文件是原始点云经降采样、去把手、离群值移除后的结果
-        //     pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ>core;
-        //     core.setInputSource(cloud);
-        //     core.setInputTarget(cut_cylinder);
-        //     boost::shared_ptr<pcl::Correspondences> cor(new pcl::Correspondences);
-        //     core.determineReciprocalCorrespondences(*cor, 0.0051);//对应点之间的最大距离
-        //     vector<int>pointIdxVec_A;// 构造重叠点云的索引
-        //     pcl::registration::getQueryIndices(*cor, pointIdxVec_A); // 获取重叠部分对应于setInputSource()输入点云的索引
-        //     pcl::PointCloud<pcl::PointXYZ>::Ptr non_overlapA(new pcl::PointCloud<pcl::PointXYZ>); //根据索引提取点云
-        //     pcl::ExtractIndices<pcl::PointXYZ> extrA;
-        //     extrA.setInputCloud(cloud);//设置输入点云
-        //     extrA.setIndices(boost::make_shared<vector<int>>(pointIdxVec_A));//设置索引
-        //     extrA.setNegative(true);   // 提取对应索引之外的点
-        //     extrA.filter(*non_overlapA);
-        //     pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor3;
-        //     sor3.setInputCloud(non_overlapA);
-        //     sor3.setMeanK(30);//50个临近点
-        //     sor3.setStddevMulThresh(1.0);//距离大于1倍标准方差
-        //     sor3.filter(*non_overlapA);
 
-        // }
         { // 存储用于点云避障的点云文件
             pcl::PCDWriter writer;
-            writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/collision.pcd", *non_overlapA, false);
+            writer.write<pcl::PointXYZ>(collision_place, *non_overlapA, false);
             std_srvs::Empty emp;
             collision_client.call(emp);
         }
@@ -673,7 +656,7 @@ L1:
             seg2.setMethodType(pcl::SAC_RANSAC);                                            // 设置采用RANSAC算法进行参数估计
             seg2.setNormalDistanceWeight(0.016);                                            // 设置表面法线权重系数
             seg2.setMaxIterations(3000);                                                    // 设置迭代的最大次数
-            seg2.setAxis({0, 1, 0});                                                        // y轴方向
+            seg2.setAxis({0, 1, 0.6});                                                      // 实验发现转轴近似与x、y夹角45度
             seg2.setEpsAngle(0.9);                                                          // 偏离角度（弧度制）
             seg2.setDistanceThreshold(0.008);                                               // 设置内点到模型距离的最大值
             seg2.setRadiusLimits(0.01, 0.016);                                              // 设置圆柱模型半径的范围
@@ -705,7 +688,6 @@ L1:
 
                 seg2.segment(*inliers_cylinder2, *coefficients_cylinder2);
                 flag = coefficients_cylinder2->values[3];
-                cout << counter << "正在搜索方向向量:(" << coefficients_cylinder2->values[3] << "," << coefficients_cylinder2->values[4] << "," << coefficients_cylinder2->values[5] << ")" << endl;
                 aa = coefficients_cylinder2->values[0]; // 转轴圆柱上一点坐标x
                 bb = coefficients_cylinder2->values[1]; // 转轴圆柱上一点坐标y
                 cc = coefficients_cylinder2->values[2]; // 转轴圆柱上一点坐标z
@@ -723,20 +705,14 @@ L1:
                 // // 此处导出的点云应当为干净的转轴圆柱
             }
 
-            // pcl::ExtractIndices<PointT> extract3;   // 创建索引提取点对象
-            // extract3.setInputCloud(plus);           // 设置输入点云：待分割点云
-            // extract3.setIndices(inliers_cylinder2); // 设置内点索引
-            // extract3.setNegative(false);                // 默认false提取圆柱体内点
-            // pcl::PointCloud<PointT>::Ptr cloud_cylinder2(new pcl::PointCloud<PointT>());
-            // extract3.filter(*cloud_cylinder2);      // 执行滤波，并将结果点云保存到cloud_cylinder中
-
             if (!cloud_cylinder2->points.empty())
             {
-                {
+#ifdef DEBUG_MODE
+                { // 存储转轴点云
                     pcl::PCDWriter writer;
-                    writer.write<pcl::PointXYZ>("/home/aemc/catkin_ws/devel/lib/rvv/out/cylinder2.pcd", *cloud_cylinder2, false);
+                    writer.write<pcl::PointXYZ>(cylinder2_place, *cloud_cylinder2, false);
                 }
-
+#endif
                 cout << "转轴轴线点坐标(" << coefficients_cylinder2->values[0] << "," << coefficients_cylinder2->values[1] << "," << coefficients_cylinder2->values[2] << ")" << endl;
                 cout << "转轴方向向量(" << coefficients_cylinder2->values[3] << "," << coefficients_cylinder2->values[4] << "," << coefficients_cylinder2->values[5] << ")" << endl;
                 cout << "转轴半径" << coefficients_cylinder2->values[6] << endl;
@@ -761,9 +737,11 @@ L1:
             else
             {
                 PCL_ERROR("识别错误！未提取出转轴圆柱轴线！");
+#ifdef DEBUG_MODE
                 End = clock();
                 double endtime = (double)(End - Start) / CLOCKS_PER_SEC;
                 cout << "Total time:" << endtime << endl;
+#endif
                 if (times_of_capture > 3)
                 {
                     int planning_status;

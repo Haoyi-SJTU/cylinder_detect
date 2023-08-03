@@ -51,7 +51,7 @@ RVC::X1 open_rvc()
 
 }
 
-int close_fucking_rvc(RVC::X1 &x1) 
+int close_rvc(RVC::X1 &x1) 
 {
     x1.Close();// Close RVC X Camera.
     RVC::X1::Destroy(x1);// Destroy RVC X Camera.

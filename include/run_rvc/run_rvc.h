@@ -5,7 +5,7 @@
 
 using namespace std;
 
-RVC::X1 open_fucking_rvc() 
+RVC::X1 open_rvc() 
 {
     FILE *DATA;
     double type = 0;

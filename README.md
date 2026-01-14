@@ -45,6 +45,8 @@
 
 基于C++版本的PCL库开发，基本思路是使用双目相机采集点云数据，点云经多级带通滤波、降采样、聚类后，排除掉目标点云附近的干扰物，对结果做基于RANSAC的圆柱拟合，得到把手的位姿：之后，去掉把手点云，对剩余的点云重复上述步骤，再次做基于RANSAC的圆柱拟合，得到转轴的位姿。综合把手和转轴的位姿数据即可得到车钩的全部位姿数据。
 
+![](https://github.com/Haoyi-SJTU/cylinder_detect/blob/master/fig/rviz-hookpicker.png)
+![](https://github.com/Haoyi-SJTU/cylinder_detect/blob/master/fig/real.png)
 
 所用到的PCL库函数包括：
 
@@ -698,6 +700,9 @@ graph TB
         float z_max = (max.x - a) * f / d + c;
         cout <<"变换前的下坐标 "<< x_min <<" "<<y_min<<" "<<z_min<< endl
 ```
+如果识别顺利，得到的车钩把手（红色）和整体的原始点云（白色）如图所示：
+
+![](https://github.com/Haoyi-SJTU/cylinder_detect/blob/master/fig/hook_recognized.jpg)
 
 #### 20. 存储去掉把手后的点云，用于规划器避障。
 
@@ -919,3 +924,7 @@ if (times_of_capture > 3)
     goto L1;
     }
 ```
+整个流程下来，在终端里的输出结果：
+
+![](https://github.com/Haoyi-SJTU/cylinder_detect/blob/master/fig/output.jpg)
+
